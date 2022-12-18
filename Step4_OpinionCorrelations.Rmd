@@ -1,0 +1,167 @@
+---
+title: |
+  | The Varieties of Turkish Nationalism
+  | Step 4: Opinion Correlations
+output:
+  html_document: 
+    number_sections: false
+    theme: united
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+pacman::p_load(
+  tidyverse, ggeffects, broom, hrbrthemes, gridExtra)
+load("survey_dataframe_version3.R")
+knitr::opts_chunk$set(dpi = 500)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+This RMarkdown file uses latent classes as predictors for a variety of opinions. Unlike the previous section, we will use base `lm` functions to fit the regressions for fast replication, though the determined replicator can switch to `brms` versions. The results are largely same
+
+# Model Fits for Beliefs
+
+We have 9 belief items. Let's fit OLS models for each of them.
+
+```{r}
+
+model_pols <- lapply(df[,
+                        c(
+                          "o_ethnomar",
+                          "o_educlang",
+                          "o_nomuslim",
+                          "o_refugee1",
+                          "o_refugee2",
+                          "o_violence",
+                          "o_foreigns",
+                          "o_abroads1",
+                          "o_abroads2"
+                        )],
+                     function(x)
+                       lm(
+                         x ~
+                           class +
+                           gender + ethnic + age + educ + relig + religiosity + lifestyle +
+                           party + ideology + polint + polinfo,
+                         data = df
+                       ))
+
+```
+
+# Marginal Mean Values for Each Class
+
+```{r, fig.width = 12.5, fig.height= 10}
+
+p1 <-
+  plot(ggemmeans(
+    model_pols[[1]], 
+    "class [all]", 
+    ci.level = 0.89,
+    vcov.fun = "vcovCL"),
+    ci.style = "dot",
+    limits = c(.25, .75),
+    breaks = c(.25, .35, .45, .55, .65, .75)) + 
+  labs(x = "", y = "Predicted Value", title = "Inter-Ethnic Marriage") +
+  theme_ipsum_rc()
+
+p2 <-
+  plot(ggemmeans(
+    model_pols[[2]], 
+    "class [all]", 
+    ci.level = 0.89,
+    vcov.fun = "vcovCL"),
+    ci.style = "dot",
+    limits = c(.10, .60),
+    breaks = c(.10, .20, .30, .40, .50, .60)) + 
+  labs(x = "", y = "", title = "Language of Education") +
+  theme_ipsum_rc()
+
+p3 <-
+  plot(ggemmeans(
+    model_pols[[3]], 
+    "class [all]", 
+    ci.level = 0.89,
+    vcov.fun = "vcovCL"),
+    ci.style = "dot",
+    limits = c(.20, .70),
+    breaks = c(.20, .30, .40, .50, .60, .70)) + 
+  labs(x = "", y = "", title = "Trust in Non-Muslims") +
+  theme_ipsum_rc()
+
+p4 <-
+  plot(ggemmeans(
+    model_pols[[4]], 
+    "class [all]", 
+    ci.level = 0.89,
+    vcov.fun = "vcovCL"),
+    ci.style = "dot",
+    limits = c(.50, 1),
+    breaks = c(.50, .60, .70, .80, .90, 1)) + 
+  labs(x = "", y = "Predicted Value", title = "Citizenship to Immigrants") +
+  theme_ipsum_rc()
+
+p5 <-
+  plot(ggemmeans(
+    model_pols[[5]], 
+    "class [all]", 
+    ci.level = 0.89,
+    vcov.fun = "vcovCL"),
+    ci.style = "dot",
+    limits = c(.50, 1),
+    breaks = c(.50, .60, .70, .80, .90, 1)) + 
+  labs(x = "", y = "", title = "State Favoring Turks") +
+  theme_ipsum_rc()
+
+p6 <-
+  plot(ggemmeans(
+    model_pols[[6]], 
+    ci.level = 0.89,
+    "class [all]", 
+    vcov.fun = "vcovCL"),
+    ci.style = "dot",
+    limits = c(.25, .75),
+    breaks = c(.25, .35, .45, .55, .65, .75)) + 
+  labs(x = "", y = "", title = "State Violence") +
+  theme_ipsum_rc()
+
+p7 <-
+  plot(ggemmeans(
+    model_pols[[7]], 
+    ci.level = 0.89,
+    "class [all]", 
+    vcov.fun = "vcovCL"),
+    ci.style = "dot",
+    limits = c(.25, .75),
+    breaks = c(.25, .35, .45, .55, .65, .75)) + 
+  labs(x = "Class", y = "Predicted Value", title = "Trust in Foreigners") +
+  theme_ipsum_rc()
+
+p8 <-
+  plot(ggemmeans(
+    model_pols[[8]], 
+    ci.level = 0.89,
+    "class [all]", 
+    vcov.fun = "vcovCL"),
+    ci.style = "dot",
+    limits = c(.25, .75),
+    breaks = c(.25, .35, .45, .55, .65, .75)) + 
+  labs(x = "Class", y = "", title = "Army Abroad") +
+  theme_ipsum_rc()
+
+p9 <-
+  plot(ggemmeans(
+    model_pols[[9]], 
+    ci.level = 0.89,
+    "class [all]", 
+    vcov.fun = "vcovCL"),
+    ci.style = "dot",
+    limits = c(.25, .75),
+    breaks = c(.25, .35, .45, .55, .65, .75)) + 
+  labs(x = "Class", y = "", title = "Turks Abroad") +
+  theme_ipsum_rc()
+
+gridExtra::grid.arrange(
+  p1, p2, p3, p4, p5, p6, p7, p8, p9, nrow = 3
+)
+
+```

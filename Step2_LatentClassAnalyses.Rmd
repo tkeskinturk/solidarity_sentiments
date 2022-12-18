@@ -1,0 +1,340 @@
+---
+title: |
+  | The Varieties of Turkish Nationalism
+  | Step 2: Latent Class Analyses
+output:
+  html_document: 
+    number_sections: true
+    theme: united
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+pacman::p_load(
+  tidyverse, broom, psych, poLCA, glca, hrbrthemes, vtable)
+load("survey_dataframe_version2.R")
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+This RMarkdown file uses Latent Class Analysis (LCA) to identify the varieties of nationalism in Turkey.
+
+# Latent Class Model Selection
+
+## Successive LCA Models Using `poLCA` Package
+
+Let us first fit successive LCA models, ranging from 1 class to 10 classes.
+
+```{r}
+
+lca.fits.baseline <- list()
+set.seed(11235)
+for (loopfr in 1:10) {
+  lcafits <- poLCA(
+    cbind(
+      natident1,
+      natident2,
+      natpride1,
+      natpride2,
+      natmembr1,
+      natmembr2,
+      natmembr3,
+      natmembr4,
+      nathubrs1,
+      nathubrs2,
+      nathubrs3,
+      nathubrs4,
+      natcultr1,
+      natcultr2
+    ) ~ 1,
+    nclass = loopfr,
+    nrep = 30,
+    maxiter = 5000,
+    data = df,
+    verbose = F
+  )
+  lca.fits.baseline[[loopfr]] <- lcafits
+}
+rm(loopfr, lcafits) # clean-up
+
+```
+
+### Fit Statistics
+
+```{r, fig.width = 6, fig.height = 4, units = "in", dpi = 500}
+
+# collect fit statistics
+lca.fits.fitstats <- 
+  as.data.frame(matrix(NA, nrow = 10, ncol = 5))
+
+for (loopfr in 1:10) {
+  model <- lca.fits.baseline[[loopfr]]
+  lca.fits.fitstats[loopfr, 1] <- loopfr
+  lca.fits.fitstats[loopfr, 2] <- model$bic # BIC
+  lca.fits.fitstats[loopfr, 3] <- model$aic # AIC
+  lca.fits.fitstats[loopfr, 4] <- model$llik # Log-Likelihood
+  lca.fits.fitstats[loopfr, 5] <- model$Gsq # Likelihood / Deviance
+}
+rm(model, loopfr) # clean-up
+
+# pretty names
+lca.fits.fitstats <- lca.fits.fitstats |>
+  rename(N = V1,
+         BIC = V2,
+         AIC = V3,
+         LLL = V4,
+         GSQ = V5)
+
+# plot the resultant statistics
+lca.fits.fitstats |>
+  pivot_longer(cols = !N, names_to = "Statistics", values_to = "Values") |>
+  ggplot(aes(x = factor(N),
+             y = Values)) +
+  geom_point() +
+  geom_line(size = .25, group = 1, linetype = "dashed") +
+  labs(x = "The Number of Classes",
+       y = "Fit Statistics") +
+  theme_ipsum_rc() +
+  facet_wrap(~ Statistics, nrow = 2, scales = "free_y")
+
+```
+
+The BIC clearly elbows at N = 4, which is in line with the previous literature. Let's do the same analyses with `glca`. This package will allow us to calculate $G^2$ statistics along with bootstrap tests to validate whether N = 4 is the right choice.
+
+## Successive LCA Models Using `gLCA` Package
+
+```{r}
+lca.fits.validate <- list()
+set.seed(11235)
+for (loopfr in 2:10) {
+  glcafits <- glca(
+    item(
+      natident1,
+      natident2,
+      natpride1,
+      natpride2,
+      natmembr1,
+      natmembr2,
+      natmembr3,
+      natmembr4,
+      nathubrs1,
+      nathubrs2,
+      nathubrs3,
+      nathubrs4,
+      natcultr1,
+      natcultr2
+    ) ~ 1,
+    nclass = loopfr,
+    n.init = 30,
+    maxiter = 5000,
+    data = df,
+    verbose = F
+  )
+  lca.fits.validate[[loopfr]] <- glcafits
+}
+rm(loopfr, glcafits) # clean-up
+
+```
+
+### Fit Statistics
+
+```{r}
+
+set.seed(11235)
+lca.fits.validfit <- gofglca(
+  lca.fits.validate[[2]],
+  lca.fits.validate[[3]],
+  lca.fits.validate[[4]],
+  lca.fits.validate[[5]],
+  lca.fits.validate[[6]],
+  lca.fits.validate[[7]], 
+  lca.fits.validate[[8]], 
+  lca.fits.validate[[9]], 
+  lca.fits.validate[[10]], test = "boot")
+
+lca.fits.validfit$gtable
+
+```
+
+Cool! It seems that going from the 4-class model to a 5-class model does not provide that much of an additional information. 
+
+## Model with 4 Classes
+
+OK, we can now fit the model with N = 4 and several covariates. Some of the covariates (particularly `party` and `relig`) have sparse cells in the four-class solution, so we merge some of the categorical cells to achieve model convergence.
+
+```{r}
+
+# some brushes
+df <- df |>
+  mutate(
+    party.bags = recode(
+      party,
+      "none" = "none",
+      "cumhur" = "cumhur",
+      "millet" = "millet",
+      "emek" = "other",
+      "other" = "other"
+    ),
+    relig.bags = ifelse(relig == "muslim", 0, 1)
+  )
+
+# model fit
+set.seed(11234)
+lca.data.4classes <- poLCA(
+  cbind(
+    natident1,
+    natident2,
+    natpride1,
+    natpride2,
+    natmembr1,
+    natmembr2,
+    natmembr3,
+    natmembr4,
+    nathubrs1,
+    nathubrs2,
+    nathubrs3,
+    nathubrs4,
+    natcultr1,
+    natcultr2
+  ) ~
+    gender + age + ethnic + educ + relig.bags + religiosity + lifestyle + 
+    party.bags + ideology + polint + polinfo,
+  nclass = 4,
+  probs.start = lca.fits.baseline[[4]]$probs.start,
+  nrep = 1,
+  maxiter = 5000,
+  data = df,
+  verbose = F
+)
+
+# no need for old brushes
+df <- df |> dplyr::select(-c(relig.bags, party.bags))
+
+```
+
+# Latent Class Model Metrics
+
+## Visualizing Classes
+
+Let's visualize the composition of response patterns across four classes. Depending on the seed used, the ordering of the classes might change (see the seed used in the Latent Class fits above for the full replication of the following code).
+
+```{r, fig.width = 12.5, fig.height = 7.5, dpi = 500}
+
+## visualize the item-response probabilities
+
+broom::tidy(lca.data.4classes) |>
+  group_by(variable, class) |>
+  mutate(class = factor(
+    class,
+    levels = c(4, 2, 1, 3),
+    labels = c("Ardent",
+               "Creedal",
+               "Disengaged",
+               "Moderate")
+  )) |>
+  mutate(
+    group = ifelse(
+      variable %in% c("natident1",
+                      "natident2"),
+      "Identification",
+      ifelse(
+        variable %in% c("natpride1",
+                        "natpride2"),
+        "Pride",
+        ifelse(
+          variable %in% c("natcultr1",
+                          "natcultr2"),
+          "Culture",
+          ifelse(
+            variable %in% c(
+              "natmembr1",
+              "natmembr2",
+              "natmembr3",
+              "natmembr4"
+            ),
+            "Membership Criteria",
+            "Hubris"
+          )
+        )
+      )
+    )) |>
+      mutate(group = factor(
+        group,
+        levels = c(
+          "Identification",
+          "Pride",
+          "Membership Criteria",
+          "Hubris",
+          "Culture"
+        )
+      )) |>
+      ggplot(aes(
+        x = variable,
+        y = estimate,
+        fill = factor(
+          outcome,
+          levels = c("1", "2", "3", "4", "5"),
+          labels = c(
+            "Strongly Disagree",
+            "Disagree",
+            "Neither Agree Nor Disagree",
+            "Agree",
+            "Strongly Agree"
+          )
+        )
+      )) +
+      geom_bar(
+        stat = "identity",
+        position = "stack",
+        color = "black"
+      ) +
+      facet_grid(class ~ group, scale = "free_x", space = "free") +
+      theme_ipsum_rc(grid = F) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 0.75)) +
+      theme(legend.position = "right") +
+      labs(x = "Variables", y = "Estimated Item Values", fill = "Response") +
+      scale_fill_brewer(type = "seq", palette = "RdBu")
+    
+```
+
+## Group Differences
+
+In what follows, we present the differences among nationalist classes in terms of several demographics.
+
+```{r}
+
+df <- df |>
+  mutate(class = lca.data.4classes$predclass) |>
+  mutate(class = factor(
+    class,
+    levels = c(4, 2, 1, 3),
+    labels = c("Ardent",
+               "Creedal",
+               "Disengaged",
+               "Moderate")
+  ))
+
+vtable::sumtable(
+  df,
+  vars = c(
+    "gender",
+    "age",
+    "ethnic",
+    "educ",
+    "relig",
+    "religiosity",
+    "lifestyle",
+    "party",
+    "ideology",
+    "polint",
+    "polinfo"
+  ),
+  group = "class",
+  group.test = T,
+  digits = 2
+)
+
+save(df, file = "survey_dataframe_version3.R")
+
+```
+
+Proceed with the Step 3: Allocation Tasks.

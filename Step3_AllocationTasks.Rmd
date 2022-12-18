@@ -1,0 +1,213 @@
+---
+title: |
+  | The Varieties of Turkish Nationalism
+  | Step 3: Resource Allocation Tasks
+output:
+  html_document: 
+    number_sections: false
+    theme: united
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+pacman::p_load(
+  tidyverse, broom, broom.mixed, brms, sjPlot, dagitty, hrbrthemes, knitr)
+load("survey_dataframe_version3.R")
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(fig.align = "center")
+```
+
+This RMarkdown file uses LCA fits to ask to what extent different nationalism typologies influence resource allocation decisions.
+
+# The Causal Model
+
+Let's draw the proposed model.
+
+```{r, fig.width = 6, fig.height = 4, dpi = 500}
+
+dag.model <- dagitty("dag{
+                          I_1 -> Class
+                          I_2 -> Class
+                          I_3 -> Class
+                          .. -> Class
+                          I_N -> Class
+                          Class -> Treatment
+                          Class -> Classification -> Treatment
+                          Z_i -> Class
+                          Z_i -> Treatment}")
+coordinates(dag.model) <-
+  list(x = c(I_1 = 0, I_2 = 1, I_3 = 2, .. = 3, I_N = 4, Class = 2, Treatment = 6, Z_i = 5, Classification = 5),
+       y = c(I_1 = 3, I_2 = 3, I_3 = 3, .. = 3, I_N = 3, Class = 1, Treatment = 1, Z_i = 2, Classification = 0))
+rethinking::drawdag(dag.model, goodarrow = T)
+
+```
+
+# The Description of the Allocation Decisions
+
+Let us first look at the distribution of allocation decisions across four tasks in the sample.
+
+```{r, fig.width = 7.5, fig.height = 5, dpi = 500}
+
+df |>
+  dplyr::select(alloc_family, alloc_friend, alloc_ethnic, alloc_anyone) |>
+  pivot_longer(cols = everything(),
+               names_to = "tasks",
+               values_to = "decisions") |>
+  mutate(
+    tasks = case_when(
+      tasks == "alloc_family" ~ "Family",
+      tasks == "alloc_friend" ~ "Friend",
+      tasks == "alloc_ethnic" ~ "Ethnic Fellow",
+      tasks == "alloc_anyone" ~ "Someone from Turkey"
+    ),
+    tasks = factor(
+      tasks,
+      levels = c("Ethnic Fellow", "Someone from Turkey", "Family", "Friend")
+    )
+  ) |>
+  ggplot(aes(x = decisions)) +
+  geom_density(col = "gray20", fill = "#B7C4CF", alpha = 0.5) +
+  theme_ipsum_rc() +
+  theme(aspect.ratio = 0.75) +
+  labs(x = "Allocation Decisions", y = "Density") +
+  facet_wrap( ~ tasks, nrow = 2) +
+  scale_y_continuous(
+    limits = c(0, 0.06),
+    breaks = c(0, 0.05),
+    labels = c(0, 0.05)
+  )
+
+```
+
+# Testing Ingroup Resource Allocation
+
+We conducted an allocation task along four dimensions, all set against an individual *anywhere in the world*: (a) someone with the same ethnicity, (b) someone who lives in Turkey, (c) someone from your family, and (d) someone from your friendship circle.
+
+While (a) and (b) tries to capture national categorization, (c) and (d) tries to set-up a baseline for familiar ingroups.
+
+Before fitting the models, let's standardize our allocation decisions so that we can easily fit the Bayesian regressions below.
+
+```{r}
+
+df <- df |> 
+  mutate(
+    alloc_ethnic = (alloc_ethnic - mean(alloc_ethnic)) / sd(alloc_ethnic),
+    alloc_anyone = (alloc_anyone - mean(alloc_anyone)) / sd(alloc_anyone),
+    alloc_family = (alloc_family - mean(alloc_family)) / sd(alloc_family),
+    alloc_friend = (alloc_friend - mean(alloc_friend)) / sd(alloc_friend),
+  )
+
+```
+
+## Bayesian Model Fits
+
+Let's first fit four regression models for each of the decision.
+
+```{r}
+
+# model fits
+
+m1 <- brm(
+  alloc_ethnic ~
+    class +
+    party + ideology + relig + religiosity +
+    gender + age + ethnic + educ,
+  data = df,
+  seed = 11235,
+  silent = 2,
+  refresh = 0
+)
+
+m2 <- brm(
+  alloc_anyone ~
+    class +
+    party + ideology + relig + religiosity +
+    gender + age + ethnic + educ,  
+  data = df,
+  seed = 11235,
+  silent = 2,
+  refresh = 0
+)
+
+m3 <- brm(
+  alloc_family ~
+    class +
+    party + ideology + relig + religiosity +
+    gender + age + ethnic + educ,
+  data = df,
+  seed = 11235,
+  silent = 2,
+  refresh = 0
+)
+
+m4 <- brm(
+  alloc_friend ~
+    class +
+    party + ideology + relig + religiosity +
+    gender + age + ethnic + educ,
+  data = df,
+  seed = 11235,
+  silent = 2,
+  refresh = 0
+)
+
+# collect and tidy the models
+
+model_univ <- list(m1,
+                   m2, 
+                   m3, 
+                   m4)
+model_univ <-
+  map(model_univ,
+      broom.mixed::tidyMCMC,
+      conf.int = T,
+      conf.level = 0.89)
+
+```
+
+## Plotting the Coefficient Values
+
+```{r, fig.width = 8, fig.height = 6}
+
+# step 1
+model_univ <- bind_rows(model_univ, .id = "depvar") |>
+  filter(term == "b_classCreedal" | term == "b_classDisengaged" | term == "b_classModerate")
+
+# step 2
+model_univ <- model_univ |>
+  mutate(
+    term = factor(
+      term, 
+      levels = c(
+        "b_classCreedal", "b_classDisengaged", "b_classModerate"),
+      labels = c(
+        "Creedal", "Disengaged", "Moderate"
+      )),
+    depvar = case_when(
+      depvar == 1 ~ "Ethnic Fellow",
+      depvar == 2 ~ "Someone from Turkey",
+      depvar == 3 ~ "Family",
+      depvar == 4 ~ "Friend"
+    ),
+    depvar = factor(depvar, levels = c(
+      "Ethnic Fellow", "Someone from Turkey", "Family", "Friend"
+    ))
+  )
+
+# step 3
+model_univ |>
+  ggplot(
+    aes(x = term, y = estimate)) + 
+  geom_point() + 
+  geom_linerange(aes(ymin = conf.low, ymax = conf.high)) + 
+  facet_wrap(~ depvar, nrow = 2) + 
+  theme_ipsum_rc(grid = 'Y') + 
+  labs(x = "Classes", y = "Δ in Average Allocation to Strangers") +
+  geom_hline(yintercept = 0)
+
+# print-out
+kable(model_univ, align = "c")
+
+```
+
+Proceed with the Step 4: Opinion Correlations.

@@ -1,0 +1,157 @@
+---
+title: |
+  | The Varieties of Turkish Nationalism
+  | Step 1: Survey Set-Up
+output:
+  html_document: 
+    number_sections: true
+    theme: united
+---
+
+```{r setup, include=FALSE}
+rm(list = ls())
+pacman::p_load(tidyverse)
+load("survey_dataframe_version1.R")
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+Hello there! Welcome to the replication files for Keskintürk and Kuyucu (2023).
+
+This first RMarkdown document prepares the Varieties of Turkish Nationalism Survey for the analyses. See the data in our shared folder.
+
+# Data Wrangling
+
+## Directions
+
+To facilitate interpretation, we are first going to recode all variables such that higher values indicate nationalist/conservative positions.
+
+```{r}
+
+df <- df |>
+  mutate_at(
+    .vars = c(
+      # nationalism variables
+      "nat01",
+      "nat03",
+      "nat04",
+      "nat05",
+      "nat06",
+      "nat07",
+      "nat08",
+      "nat09",
+      "nat10",
+      "nat11",
+      "nat12",
+      "nat13",
+      "nat14",
+      # opinion variables
+      "o_nomuslim",
+      "o_refugee1",
+      "o_refugee2",
+      "o_violence",
+      "o_foreigns",
+      "o_abroads1",
+      "o_abroads2"
+    ),
+    list(~ case_when(. == 1 ~ 5,
+                     . == 2 ~ 4,
+                     . == 3 ~ 3,
+                     . == 4 ~ 2,
+                     . == 5 ~ 1))
+  )
+
+```
+
+## Labeling
+
+OK, let's now categorize nationalism variables, so that we can interpret typologies more clearly later.
+
+```{r}
+
+df <- df |>
+  rename(
+    # part 1: national identification
+    natident1 = nat01,
+    ## "I define myself, first and foremost, as part of the Turkish nation."
+    natident2 = nat02,
+    ## "If I could be a citizen of another country, I would easily give up my citizenship."
+
+    # part 2: national pride
+    natpride1 = nat03,
+    ## "Being part of the Turkish nation makes me proud."
+    natpride2 = nat04,
+    ## "Turkey's achievements in international competitions make me proud."
+    
+    # part 3: membership criteria
+    natmembr1 = nat05,
+    ## "Speaking Turkish is an indispensable condition of being Turkish."
+    natmembr2 = nat06,
+    ## "Kurds live in Turkey as equal citizens without any discrimination."
+    natmembr3 = nat07,
+    ## "I define myself first as a "Turk," and then as a citizen of the Republic of Turkey."
+    natmembr4 = nat08,
+    ## "I doubt the Turkishness of a non-Muslim."
+    
+    # part 4: national hubris
+    nathubrs1 = nat09,
+    ## "I consider my own nation superior to all other nations."
+    nathubrs2 = nat10,
+    ## "The contribution of Turks to world civilization is higher than other nations."
+    nathubrs3 = nat11,
+    ## "Turkey lags behind due to the interventions of internal and external enemies."
+    nathubrs4 = nat13,
+    ## "Discussing controversial events (e.g., the Armenians or the Kurdish issue) bothers me."
+
+    # part 5: national culture and politics
+    natcultr1 = nat12,
+    ## "It is not race or religion that makes us who we are, but Turkish national culture."
+    natcultr2 = nat14,
+    ## "Every Turkish citizen has to respect the historical heritage of the country."
+  )
+
+```
+
+## Normalization
+
+OK, we processed the data. We are now going to create a second version of the data to use in the upcoming scripts. Before saving our dataset, we will normalize certain continuous variables such that we will have a minimum of 0 and a maximum of 1.
+
+```{r}
+
+# helper function
+normalize <- function(x) {
+  (x - min(x)) / (max(x) - min(x))
+}
+
+# normalize
+
+df <- df |>
+  mutate_at(c(
+    "age",
+    "educ",
+    "religiosity",
+    "lifestyle",
+    "ideology",
+    "polint",
+    "polinfo",
+    "o_ethnomar",
+    "o_educlang",
+    "o_nomuslim",
+    "o_refugee1",
+    "o_refugee2",
+    "o_violence",
+    "o_foreigns",
+    "o_abroads1",
+    "o_abroads2"
+  ), ~(normalize(.) |> as.vector()))
+
+```
+
+# Saving the Dataset
+
+```{r}
+
+save(df, file = "survey_dataframe_version2.R")
+
+```
+
+Proceed with the Step 2: Latent Class Analyses.
